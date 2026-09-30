@@ -1,0 +1,41 @@
+"""
+Real-time audio buffer capture for live meeting processing.
+"""
+import numpy as np
+import sounddevice as sd
+import queue
+
+class AudioStreamCapture:
+    def __init__(self, sample_rate: int = 16000, block_duration: float = 3.0):
+        self.sample_rate = sample_rate
+        self.block_duration = block_duration
+        self.block_size = int(self.sample_rate * self.block_duration)
+        self.audio_queue = queue.Queue()
+        self.is_running = False
+
+    def _audio_callback(self, indata, frames, time_info, status):
+        if status:
+            print(f"[Audio Warning] {status}", flush=True)
+        self.audio_queue.put(indata.copy().flatten())
+
+    def start(self) -> None:
+        self.is_running = True
+        self.stream = sd.InputStream(
+            samplerate=self.sample_rate,
+            channels=1,
+            dtype="float32",
+            blocksize=self.block_size,
+            callback=self._audio_callback
+        )
+        self.stream.start()
+
+    def get_chunk(self) -> np.ndarray:
+        if not self.audio_queue.empty():
+            return self.audio_queue.get()
+        return None
+
+    def stop(self) -> None:
+        self.is_running = False
+        if hasattr(self, 'stream'):
+            self.stream.stop()
+            self.stream.close()
